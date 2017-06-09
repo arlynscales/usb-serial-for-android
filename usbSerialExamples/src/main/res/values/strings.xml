@@ -3,7 +3,17 @@
 
     <string name="app_title">USB Serial Example</string>
     <string name="app_name">Serial Example</string>
-    <string name="refreshing">Refreshing...</string>
+    <string name="input">Text</string>
+    <string name="delay">Delay</string>
+    <string name="milliseconds">ms   (must be >= 100)</string>
+    <string name="send">Send</string>
+    <string name="stop">Stop</string>
+    <string name="repeat">Repeats</string>
+    <string name="repeat_default">1</string>
+    <string name="delay_default">250</string>
+
+    <string name="repeat_msg">(Send text repeatedly. 0 = forever) </string>
+    <string name="refreshing">Refreshing…</string>
     <string name="textBtnRTS">RTS - Request To Send</string>
     <string name="textBtnDTR">DTR - Data Terminal Ready</string>
 

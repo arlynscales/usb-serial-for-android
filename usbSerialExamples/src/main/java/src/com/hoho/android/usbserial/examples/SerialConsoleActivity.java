@@ -19,21 +19,28 @@
  * Project home page: https://github.com/mik3y/usb-serial-for-android
  */
 
-package com.hoho.android.usbserial.examples;
+package src.com.hoho.android.usbserial.examples;
 
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.usb.UsbDeviceConnection;
 import android.hardware.usb.UsbManager;
+import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.SystemClock;
 import android.util.Log;
+import android.view.View;
+import android.widget.Button;
 import android.widget.CheckBox;
 import android.widget.CompoundButton;
+import android.widget.EditText;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import com.hoho.android.usbserial.driver.UsbSerialPort;
+import com.hoho.android.usbserial.examples.R;
 import com.hoho.android.usbserial.util.HexDump;
 import com.hoho.android.usbserial.util.SerialInputOutputManager;
 
@@ -68,6 +75,12 @@ public class SerialConsoleActivity extends Activity {
     private ScrollView mScrollView;
     private CheckBox chkDTR;
     private CheckBox chkRTS;
+    private EditText mInputEdit;
+    private EditText mRepeatEdit;
+    private EditText mDelayEdit;
+    private Button mSendButton;
+
+    private boolean mStop = false;
 
     private final ExecutorService mExecutor = Executors.newSingleThreadExecutor();
 
@@ -101,6 +114,12 @@ public class SerialConsoleActivity extends Activity {
         mScrollView = (ScrollView) findViewById(R.id.demoScroller);
         chkDTR = (CheckBox) findViewById(R.id.checkBoxDTR);
         chkRTS = (CheckBox) findViewById(R.id.checkBoxRTS);
+        mInputEdit = (EditText) findViewById(R.id.editInput);
+        mRepeatEdit = (EditText) findViewById(R.id.editRepeat);
+        mDelayEdit = (EditText) findViewById(R.id.editDelay);
+        mSendButton = (Button) findViewById(R.id.sendButton);
+
+
 
         chkDTR.setOnCheckedChangeListener(new CompoundButton.OnCheckedChangeListener() {
             @Override
@@ -120,8 +139,130 @@ public class SerialConsoleActivity extends Activity {
             }
         });
 
+        mSendButton.setOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View v) {
+                if (mSendButton.getText().toString().equals(getString(R.string.send))) {
+                    mStop = false;
+                    sendDataToUsb();
+                } else {
+                    mStop = true;
+                }
+            }
+        });
+
     }
 
+    private void sendDataToUsb() {
+
+        if (sPort == null) {
+            Toast.makeText(this, "Port is not open", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        String data = mInputEdit.getText().toString();
+        String repeatStr = mRepeatEdit.getText().toString();
+        int repeat = 0;
+
+        if (data.isEmpty()) {
+            Toast.makeText(this, "Input is empty", Toast.LENGTH_SHORT).show();
+            return;
+        }
+
+        if (!repeatStr.isEmpty()) {
+            repeat = Integer.parseInt(repeatStr);
+        }
+
+
+        if (repeat == 1) {
+            byte[] buf = data.getBytes();
+            try {
+                if (sPort.write(buf, 500) != data.getBytes().length) {
+                    Log.e(TAG, "Error sending data out");
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        } else if (repeat >= 0) {
+            String delayStr = mDelayEdit.getText().toString();
+            int delay = Integer.parseInt(delayStr);
+
+            if (delay < 100) {
+                Toast.makeText(this, "Repeat Delay must be greater than 100 ms", Toast.LENGTH_SHORT).show();
+                return;
+            }
+
+            mRepeatEdit.setEnabled(false);
+            mInputEdit.setEnabled(false);
+            mDelayEdit.setEnabled(false);
+
+            mSendButton.setText(getString(R.string.stop));
+            new SendDataRepeatedlyTask().execute(repeat);
+        }
+
+    }
+
+    private class SendDataRepeatedlyTask extends AsyncTask<Integer, Void, Integer> {
+        private byte[] mData;
+        private int mRepeats;
+        private int mDelay;
+
+        @Override
+        protected void onPreExecute() {
+            String data = mInputEdit.getText().toString();
+            mData = data.getBytes();
+
+            String delay = mDelayEdit.getText().toString();
+            mDelay = Integer.parseInt(delay);
+        }
+
+
+        @Override
+        protected Integer doInBackground(Integer... repeats) {
+            mRepeats = repeats[0];
+            boolean foreverMode = false;
+
+            // If user wanted to repeat endlessly, turn on foreverMode;
+            if (mRepeats == 0) foreverMode = true;
+
+            while(!mStop) {
+                try {
+                    if (sPort.write(mData, 500) != mData.length) {
+                        Log.e(TAG, "Error sending data out");
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+
+                // Send every 250 milliseconds.
+                SystemClock.sleep(250);
+
+                if (foreverMode) continue;
+                else mRepeats--;
+
+                // Once we deplete "repeats" stop
+                if (mRepeats == 0) break;
+
+            }
+
+            if (mStop) return 1;    // User abruptly stopped the repeat process.
+
+            return 0;
+        }
+
+        @Override
+        protected void onPostExecute(Integer result) {
+
+            if (result == 1) {
+                Toast.makeText(SerialConsoleActivity.this, "Sending Process was interrupted", Toast.LENGTH_SHORT).show();
+            }
+
+            mRepeatEdit.setEnabled(true);
+            mInputEdit.setEnabled(true);
+            mDelayEdit.setEnabled(true);
+            mSendButton.setText(getString(R.string.send));
+        }
+    }
 
     @Override
     protected void onPause() {
@@ -217,8 +358,8 @@ public class SerialConsoleActivity extends Activity {
     /**
      * Starts the activity, using the supplied driver instance.
      *
-     * @param context
-     * @param driver
+     * @param context - Context
+     * @param port - USB Serial Port
      */
     static void show(Context context, UsbSerialPort port) {
         sPort = port;
